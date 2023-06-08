@@ -1,0 +1,146 @@
+
+#include <MQUnifiedsensor.h>
+/************************Hardware Related Macros************************************/
+#define         Board                   ("Arduino UNO")
+#define         Pin                     (A0)  //Analog input 3 of your arduino
+/***********************Software Related Macros************************************/
+#define         Type                    ("MQ-3") //MQ3
+#define         Voltage_Resolution      (5)
+#define         ADC_Bit_Resolution      (10) // For arduino UNO/MEGA/NANO
+#define         RatioMQ3CleanAir        (60) //RS / R0 = 60 ppm 
+/*****************************Globals***********************************************/
+//Declare Sensor
+MQUnifiedsensor MQ3(Board, Voltage_Resolution, ADC_Bit_Resolution, Pin, Type);
+
+
+// RC카 작동
+int RightMotor_E_pin = 5;                   
+int LeftMotor_E_pin = 6;                    
+int RightMotor_1_pin = 8;                    
+int RightMotor_2_pin = 9;                    
+int LeftMotor_3_pin = 10;                    
+int LeftMotor_4_pin = 11;                  
+
+int L_MotorSpeed = 153;                    
+int R_MotorSpeed = 153; 
+
+void setup() 
+{
+  pinMode(RightMotor_E_pin, OUTPUT);         
+  pinMode(RightMotor_1_pin, OUTPUT);
+  pinMode(RightMotor_2_pin, OUTPUT);
+  pinMode(LeftMotor_3_pin, OUTPUT);
+  pinMode(LeftMotor_4_pin, OUTPUT);
+  pinMode(LeftMotor_E_pin, OUTPUT);
+
+  Serial.begin(9600);                       
+  Serial.println("Welcome Eduino!");
+
+
+  Serial.begin(9600);
+  MQ3.setRegressionMethod(1);
+  MQ3.setA(0.3934); MQ3.setB(-1.504); 
+  MQ3.init(); 
+  Serial.print("Calibrating please wait.");
+  float calcR0 = 0;
+  for(int i = 1; i<=10; i ++)
+  {
+    MQ3.update();
+    calcR0 += MQ3.calibrate(RatioMQ3CleanAir);
+    Serial.print(".");
+  }
+  MQ3.setR0(calcR0/10);
+  Serial.println("  done!.");
+  
+  if(isinf(calcR0))
+  {
+    Serial.println("Warning: Conection issue, R0 is infinite (Open circuit detected) please check your wiring and supply"); while(1);
+  }
+  if(calcR0 == 0)
+  {
+    Serial.println("Warning: Conection issue found, R0 is zero (Analog pin shorts to ground) please check your wiring and supply"); while(1);
+  }
+  MQ3.serialDebug(true);
+}
+
+void loop() 
+{
+  MQ3.update();
+  float data = MQ3.readSensor();
+
+  if (Serial.available())
+  {                  
+    char command = Serial.read();
+
+    if(data < 0.01)
+    {
+      if(command == 'g')
+      {                    
+        motor(HIGH, HIGH, "Forward");
+        Serial.println("직진");
+        Serial.println(data); 
+      }
+
+      else if(command == 'b')
+      {               
+        motor(LOW, LOW, "Backward"); 
+        Serial.println("후진");
+        Serial.println(data);
+      }
+
+      else if(command == 's')
+      {
+        analogWrite(RightMotor_E_pin, 0);  
+        analogWrite(LeftMotor_E_pin, 0);
+        Serial.println("정지");
+      }
+
+      else if(command == 'l')
+      {
+        motor(HIGH, HIGH, "Left");
+        Serial.println("좌회전");
+        Serial.println(data);
+      }
+
+      else if(command == 'r')
+      {
+        motor(HIGH, HIGH, "Right");
+        Serial.println("우회전");
+        Serial.println(data);
+      }
+    }
+
+    else if(data >= 0.01)
+    {
+      Serial.println("알코올 감지!! 주행불가!!");
+      Serial.println(data);      
+    }
+  }
+}
+
+
+void motor(int R_motor, int L_motor, String direction)
+{
+   digitalWrite(RightMotor_1_pin, R_motor);
+   digitalWrite(RightMotor_2_pin, !R_motor);
+   digitalWrite(LeftMotor_3_pin, L_motor);
+   digitalWrite(LeftMotor_4_pin, !L_motor);
+
+   if (direction == "Forward" || direction == "Backward")
+   {
+     analogWrite(RightMotor_E_pin, R_MotorSpeed);  
+     analogWrite(LeftMotor_E_pin, L_MotorSpeed); 
+   }
+
+   else if (direction == "Left")
+   {
+     analogWrite(RightMotor_E_pin, R_MotorSpeed*1.4);  
+     analogWrite(LeftMotor_E_pin, L_MotorSpeed*0.5);
+   }
+
+   else if (direction == "Right")
+   {
+     analogWrite(RightMotor_E_pin, R_MotorSpeed*0.5);
+     analogWrite(LeftMotor_E_pin, L_MotorSpeed*1.4);
+   }
+}
